@@ -10,11 +10,8 @@ jobs:
       matrix:
         HATCH_VERBOSE: ["1", ""]
         EXCLUDE_NEWER:
-          - "2025-11-27T12:00:00+11:00"
           - "2025-11-27T11:45:00+11:00"
           - "2025-11-27T11:30:00+11:00"
-          - "2025-11-27T11:15:00+11:00"
-          - "2025-11-27T11:00:00+11:00"
 
     outputs:
       version: ${{ steps.version.outputs.version }}
@@ -39,9 +36,61 @@ jobs:
       - name: Calculate version
         id: version
         run: |
+          set -x
+
           # Conditionally set env vars if value is non-empty
           [ -n "${{ matrix.HATCH_VERBOSE }}" ] && export HATCH_VERBOSE="${{ matrix.HATCH_VERBOSE }}"
 
           version=$(hatch version)
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  version-split-output:
+    name: Split output (HATCH_VERBOSE=${{ matrix.HATCH_VERBOSE }}, EXCLUDE_NEWER=${{ matrix.EXCLUDE_NEWER }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        HATCH_VERBOSE: ["1", ""]
+        EXCLUDE_NEWER:
+          - "2025-11-27T11:45:00+11:00"
+          - "2025-11-27T11:30:00+11:00"
+
+    env:
+      UV_EXCLUDE_NEWER: ${{ matrix.EXCLUDE_NEWER }}
+
+    steps:
+      - uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3  # v6.0.0
+        with:
+          fetch-depth: 0
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@1e862dfacbd1d6d858c55d9b792c756523627244  # v7.1.4
+        with:
+          enable-cache: true
+
+      - name: Install Hatch
+        shell: bash
+        run: uv tool install hatch
+
+      - name: Display version only
+        run: |
+          hatch version
+
+      - name: Split stdout/stderr
+        id: split
+        run: |
+          set -x
+
+          # Conditionally set env vars if value is non-empty
+          [ -n "${{ matrix.HATCH_VERBOSE }}" ] && export HATCH_VERBOSE="${{ matrix.HATCH_VERBOSE }}"
+
+          hatch version 2>stderr.txt 1>stdout.txt
+
+          echo "::group::STDOUT"
+          cat stdout.txt
+          echo "::endgroup::"
+
+          echo "::group::STDERR"
+          cat stderr.txt
+          echo "::endgroup::"
